@@ -4,13 +4,12 @@ TODO
 - Support multiple retry attempts if a file exists (see FS Adapter)
 */
 
-// Mirroring keystone 0.4's support of node 0.12.
-var assign = require('object-assign');
-var debug = require('debug')('keystone-s3');
+var debug = require('debug')('coatilabs:keystone-s3');
 var ensureCallback = require('keystone-storage-namefunctions/ensureCallback');
 var knox = require('knox-s3');
 var nameFunctions = require('keystone-storage-namefunctions');
 var pathlib = require('path');
+var Jimp = require('jimp');
 
 var DEFAULT_OPTIONS = {
 	key: process.env.S3_KEY,
@@ -18,6 +17,9 @@ var DEFAULT_OPTIONS = {
 	bucket: process.env.S3_BUCKET,
 	region: process.env.S3_REGION || 'us-east-1',
 	generateFilename: nameFunctions.randomFilename,
+	manageImage: function(file, callback) {
+        callback(null, file);
+    }
 };
 
 // This constructor is usually called indirectly by the Storage class
@@ -113,34 +115,40 @@ S3Adapter.prototype.uploadFile = function (file, callback) {
 		});
 
 		debug('Uploading file %s', filename);
-		self.client.putFile(localpath, destpath, headers, function (err, res) {
-			if (err) return callback(err);
-			if (res.statusCode !== 200) {
-				return callback(new Error('Amazon returned status code: ' + res.statusCode));
-			}
-			res.resume(); // Discard (empty) body.
+		Jimp.read(localpath, function (err, workingfile) {
+            if (err) return callback(err);
+            self.manageImage(workingfile, function(err, filetosave) {
+                if (err) return callback(err);
+				self.client.putFile(file.path, destpath, headers, function (err, res) {
+					if (err) return callback(err);
+					if (res.statusCode !== 200) {
+						return callback(new Error('Amazon returned status code: ' + res.statusCode));
+					}
+					res.resume(); // Discard (empty) body.
 
-			// We'll annotate the file with a bunch of extra properties. These won't
-			// be saved in the database unless the corresponding schema options are
-			// set.
-			file.filename = filename;
-			file.etag = res.headers.etag; // TODO: This etag is double-quoted (??why?)
+					// We'll annotate the file with a bunch of extra properties. These won't
+					// be saved in the database unless the corresponding schema options are
+					// set.
+					file.filename = filename;
+					file.etag = res.headers.etag; // TODO: This etag is double-quoted (??why?)
 
-			// file.url is automatically populated by keystone's Storage class so we
-			// don't need to set it here.
+					// file.url is automatically populated by keystone's Storage class so we
+					// don't need to set it here.
 
-			// The path and bucket can be stored on a per-file basis if you want.
-			// The effect of this is that you can have some (eg, old) files in your
-			// collection stored in different bucket / different path inside your
-			// bucket. This means you can do slow data migrations. Note that if you
-			// *don't* store these values you can arguably migrate your data more
-			// easily - just move it all, reconfigure and restart your server.
-			file.path = self.options.path;
-			file.bucket = self.options.bucket;
+					// The path and bucket can be stored on a per-file basis if you want.
+					// The effect of this is that you can have some (eg, old) files in your
+					// collection stored in different bucket / different path inside your
+					// bucket. This means you can do slow data migrations. Note that if you
+					// *don't* store these values you can arguably migrate your data more
+					// easily - just move it all, reconfigure and restart your server.
+					file.path = self.options.path;
+					file.bucket = self.options.bucket;
 
-			debug('file upload successful');
-			callback(null, file);
-		});
+					debug('file upload successful');
+					callback(null, file);
+				});
+            });
+        });
 	});
 };
 

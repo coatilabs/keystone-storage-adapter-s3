@@ -1,8 +1,8 @@
-# S3-based storage adapter for KeystoneJS
+# S3-based storage adapter for KeystoneJS with Jimp integration.
 
-This adapter is designed to replace the existing `S3File` field in KeystoneJS using the new storage API.
+This adapter is designed to replace the existing `S3File` field in KeystoneJS using the new storage API, modified to  manipulate images after upload with [Jimp](https://github.com/oliver-moran/jimp) tool.
 
-Compatible with Node.js 0.12+
+Tested in Node.js 6.12.2
 
 ## Usage
 
@@ -20,6 +20,10 @@ var storage = new keystone.Storage({
     headers: {
       'x-amz-acl': 'public-read', // add default headers; see below for details
     },
+    manageImage: function(file, callback) {
+      // Here you can manipulate file
+      callback(null, file);
+    }
   },
   schema: {
     bucket: true, // optional; store the bucket the file was uploaded to in your db
@@ -55,6 +59,8 @@ The adapter requires an additional `s3` field added to the storage options. It a
 
 - **headers**: Default headers to add when uploading files to S3. You can use these headers to configure lots of additional properties and store (small) extra data about the files in S3 itself. See [AWS documentation](http://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPUT.html) for options. Examples: `{"x-amz-acl": "public-read"}` to override the bucket ACL and make all uploaded files globally readable.
 
+- **manageImage**: _(function; default: copies same file)_ Method to manipulate your image file
+  - See [`Jimp`](https://github.com/oliver-moran/jimp) for additional  documentation.
 
 ### Schema
 
